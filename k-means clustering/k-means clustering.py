@@ -15,12 +15,12 @@ from gensim.models import Word2Vec
 from sklearn.cluster import KMeans
 from collections import defaultdict
 
-#根据模型文件路径加载训练好的模型
+#加载Word2Vec模型
 def load_word2vec_model(path):
     model=Word2Vec.load(path)
     return model
 
-#从文件中加载句子并处理
+#从文件中加载句子并去重
 def load_sentence(path):
     sentences=set()
     with open(path,encoding="utf8") as f:
@@ -30,7 +30,7 @@ def load_sentence(path):
     print("获取句子数量：",len(sentences))
     return sentences
 
-#将文本向量化
+#将句子向量化
 def sentences_to_vectors(sentences,model):
     vectors=[]
     for sentence in sentences:
@@ -59,7 +59,7 @@ def main():
     model=load_word2vec_model("model.w2v")  #加载词向量模型
     sentences=load_sentence("titles.txt")     #加载所有标题
     vectors=sentences_to_vectors(sentences,model)  #将所有标题向量化
-
+    #聚类
     n_clusters=int(math.sqrt(len(sentences)))  #指定聚类数量
     print("指定聚类数量：",n_clusters)  
     kmeans=KMeans(n_clusters)   #定义一个kmeans计算类
