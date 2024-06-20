@@ -4,9 +4,8 @@ import torch
 import torch.nn as nn
 import jieba
 import numpy as np
-import random
 import json
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 """
 基于pytorch的网络编写一个分词模型
@@ -17,54 +16,56 @@ from torch.utils.data import DataLoader
 class TorchModel(nn.Module):
     def __init__(self, input_dim, hidden_size, num_rnn_layers, vocab):
         super(TorchModel, self).__init__()
-        self.embedding = nn.Embedding(len(vocab) + 1, input_dim) #shape=(vocab_size, dim)
+        # 词嵌入层，将词汇表中的词映射到一个定长的向量
+        self.embedding = nn.Embedding(len(vocab) + 1, input_dim)  # shape=(vocab_size, dim)
+        # RNN层，进行序列处理
         self.rnn_layer = nn.RNN(input_size=input_dim,
-                            hidden_size=hidden_size,
-                            batch_first=True,
-                            bidirectional=False,
-                            num_layers=num_rnn_layers,
-                            nonlinearity="relu",
-                            dropout=0.1)
+                                hidden_size=hidden_size,
+                                batch_first=True,
+                                bidirectional=False,
+                                num_layers=num_rnn_layers,
+                                nonlinearity="relu",
+                                dropout=0.1)
+        # 分类层，将RNN的输出映射到分类标签
         self.classify = nn.Linear(hidden_size, 2)
+        # 损失函数，用于计算分类任务的损失
         self.loss_func = nn.CrossEntropyLoss(ignore_index=-100)
 
-
-    #当输入真实标签，返回loss值；无真实标签，返回预测值
     def forward(self, x, y=None):
-        x = self.embedding(x)  #output shape:(batch_size, sen_len, input_dim)
-        x, _ = self.rnn_layer(x)  #output shape:(batch_size, sen_len, hidden_size)
-        y_pred = self.classify(x)   #input shape:(batch_size, sen_len, class_num)
+        # 前向传播过程
+        x = self.embedding(x)  # output shape:(batch_size, sen_len, input_dim)
+        x, _ = self.rnn_layer(x)  # output shape:(batch_size, sen_len, hidden_size)
+        y_pred = self.classify(x)  # input shape:(batch_size, sen_len, class_num)
+        # 如果提供了标签y，计算并返回损失值；否则返回预测结果
         if y is not None:
-            #(batch_size * sen_len, class_num),   (batch_size * sen_len, 1)
             return self.loss_func(y_pred.view(-1, 2), y.view(-1))
         else:
             return y_pred
 
-class Dataset:
+class TextDataset(Dataset):
     def __init__(self, corpus_path, vocab, max_length):
         self.vocab = vocab
         self.corpus_path = corpus_path
         self.max_length = max_length
-        self.load()
+        self.data = self.load_data()
 
-    def load(self):
-        self.data = []
+    def load_data(self):
+        # 加载语料库数据并进行预处理
+        data = []
         with open(self.corpus_path, encoding="utf8") as f:
             for line in f:
-                sequence = sentence_to_sequence(line, self.vocab)
-                label = sequence_to_label(line)
+                sequence = sentence_to_sequence(line.strip(), self.vocab)
+                label = sequence_to_label(line.strip())
                 sequence, label = self.padding(sequence, label)
-                sequence = torch.LongTensor(sequence)
-                label = torch.LongTensor(label)
-                self.data.append([sequence, label])
-                if len(self.data) > 10000:
+                data.append([torch.LongTensor(sequence), torch.LongTensor(label)])
+                if len(data) > 10000:  # 限制数据量
                     break
+        return data
 
     def padding(self, sequence, label):
-        sequence = sequence[:self.max_length]
-        sequence += [0] * (self.max_length - len(sequence))
-        label = label[:self.max_length]
-        label += [-100] * (self.max_length - len(label))
+        # 对序列和标签进行填充，使其达到最大长度
+        sequence = sequence[:self.max_length] + [0] * (self.max_length - len(sequence))
+        label = label[:self.max_length] + [-100] * (self.max_length - len(label))
         return sequence, label
 
     def __len__(self):
@@ -73,13 +74,12 @@ class Dataset:
     def __getitem__(self, item):
         return self.data[item]
 
-#文本转化为数字序列，为embedding做准备
 def sentence_to_sequence(sentence, vocab):
-    sequence = [vocab.get(char, vocab['unk']) for char in sentence]
-    return sequence
+    # 将句子转换为词汇表对应的索引序列
+    return [vocab.get(char, vocab['unk']) for char in sentence]
 
-#基于结巴生成分级结果的标注
 def sequence_to_label(sentence):
+    # 根据分词结果生成标签序列，0表示词中间，1表示词的结尾
     words = jieba.lcut(sentence)
     label = [0] * len(sentence)
     pointer = 0
@@ -88,92 +88,80 @@ def sequence_to_label(sentence):
         label[pointer - 1] = 1
     return label
 
-#加载字表
 def build_vocab(vocab_path):
+    # 构建词汇表，将字符映射到索引
     vocab = {}
     with open(vocab_path, "r", encoding="utf8") as f:
         for index, line in enumerate(f):
             char = line.strip()
-            vocab[char] = index + 1   #每个字对应一个序号
-    vocab['unk'] = len(vocab) + 1
+            vocab[char] = index + 1
+    vocab['unk'] = len(vocab) + 1  # 未知字符的索引
     return vocab
 
-#建立数据集
 def build_dataset(corpus_path, vocab, max_length, batch_size):
-    dataset = Dataset(corpus_path, vocab, max_length) #diy __len__ __getitem__
-    data_loader = DataLoader(dataset, shuffle=True, batch_size=batch_size) #torch
-    return data_loader
+    # 构建数据集，并返回数据加载器
+    dataset = TextDataset(corpus_path, vocab, max_length)
+    return DataLoader(dataset, shuffle=True, batch_size=batch_size)
 
+def train_model(epoch_num, batch_size, char_dim, hidden_size, num_rnn_layers, max_length, learning_rate, vocab_path, corpus_path):
+    # 模型训练过程
+    vocab = build_vocab(vocab_path)
+    data_loader = build_dataset(corpus_path, vocab, max_length, batch_size)
+    model = TorchModel(char_dim, hidden_size, num_rnn_layers, vocab)
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 
-def main():
-    epoch_num = 10        #训练轮数
-    batch_size = 20       #每次训练样本个数
-    char_dim = 50         #每个字的维度
-    hidden_size = 100     #隐含层维度
-    num_rnn_layers = 3    #rnn层数
-    max_length = 20       #样本最大长度
-    learning_rate = 1e-3  #学习率
-    vocab_path = "chars.txt"  #字表文件路径
-    corpus_path = "corpus"  #语料文件路径
-    vocab = build_vocab(vocab_path)       #建立字表
-    data_loader = build_dataset(corpus_path, vocab, max_length, batch_size)  #建立数据集
-    model = TorchModel(char_dim, hidden_size, num_rnn_layers, vocab)   #建立模型
-    optim = torch.optim.Adam(model.parameters(), lr=learning_rate)     #建立优化器
-    #训练开始
     for epoch in range(epoch_num):
         model.train()
         watch_loss = []
         for x, y in data_loader:
-            optim.zero_grad()    #梯度归零
-            loss = model(x, y)   #计算loss
-            loss.backward()      #计算梯度
-            optim.step()         #更新权重
+            optimizer.zero_grad()
+            loss = model(x, y)
+            loss.backward()
+            optimizer.step()
             watch_loss.append(loss.item())
-        print("=========\n第%d轮平均loss:%f" % (epoch + 1, np.mean(watch_loss)))
-    #保存模型
+        print(f"=========\n第{epoch + 1}轮平均loss: {np.mean(watch_loss)}")
+
     torch.save(model.state_dict(), "model.pth")
-    #保存词表
-    writer = open("vocab.json", "w", encoding="utf8")
-    writer.write(json.dumps(vocab, ensure_ascii=False, indent=2))
-    writer.close()
-    return
+    with open("vocab.json", "w", encoding="utf8") as writer:
+        writer.write(json.dumps(vocab, ensure_ascii=False, indent=2))
 
-#最终预测
 def predict(model_path, vocab_path, input_strings):
-    #配置保持和训练时一致
-    char_dim = 50  # 每个字的维度
-    hidden_size = 100  # 隐含层维度
-    num_rnn_layers = 3  # rnn层数
-    vocab = build_vocab(vocab_path)       #建立字表
-    model = TorchModel(char_dim, hidden_size, num_rnn_layers, vocab)   #建立模型
-    model.load_state_dict(torch.load(model_path))   #加载训练好的模型权重
+    # 模型预测过程
+    char_dim = 50
+    hidden_size = 100
+    num_rnn_layers = 3
+    vocab = build_vocab(vocab_path)
+    model = TorchModel(char_dim, hidden_size, num_rnn_layers, vocab)
+    model.load_state_dict(torch.load(model_path))
     model.eval()
+
     for input_string in input_strings:
-        #逐条预测
         x = sentence_to_sequence(input_string, vocab)
-        print(x)
         with torch.no_grad():
-            result = model.forward(torch.LongTensor([x]))[0]
-            result = torch.argmax(result, dim=-1)  #预测出的01序列
-            print(result)
-            #在预测为1的地方切分，将切分后文本打印出来
-            for index, p in enumerate(result):
-                if p == 1:
-                    print(input_string[index], end=" ")
-                else:
-                    print(input_string[index], end="")
-            print()
-
-
+            result = model(torch.LongTensor([x]))[0]
+            result = torch.argmax(result, dim=-1).numpy()
+            segmented_sentence = ''.join([char if tag == 0 else char + ' ' for char, tag in zip(input_string, result)])
+            print(segmented_sentence)
 
 if __name__ == "__main__":
-    main()
-    print(jieba.lcut("今天天气不错我们去春游吧"))
-    print(sequence_to_label("今天天气不错我们去春游吧"))
-    print(sentence_to_sequence("今天天气不错我们去春游吧"))
-    input_strings = ["同时国内有望出台新汽车刺激方案",
-                     "沪胶后市有望延续强势",
-                     "经过两个交易日的强势调整后",
-                     "昨日上海天然橡胶期货价格再度大幅上扬"]
-    predict("model.pth", "chars.txt", input_strings)
+    # 训练模型
+    train_model(
+        epoch_num=10,
+        batch_size=20,
+        char_dim=50,
+        hidden_size=100,
+        num_rnn_layers=3,
+        max_length=20,
+        learning_rate=1e-3,
+        vocab_path="chars.txt",
+        corpus_path="corpus"
+    )
 
+    # 预测示例
+    input_strings = [
+        "同时国内有望出台新汽车刺激方案",
+        "沪胶后市有望延续强势",
+        "经过两个交易日的强势调整后",
+        "昨日上海天然橡胶期货价格再度大幅上扬"
+    ]
+    predict("model.pth", "chars.txt", input_strings)
