@@ -114,7 +114,7 @@ def main():
     max_length = 20       #样本最大长度
     learning_rate = 1e-3  #学习率
     vocab_path = "chars.txt"  #字表文件路径
-    corpus_path = "corpus.txt"  #语料文件路径
+    corpus_path = "corpus"  #语料文件路径
     vocab = build_vocab(vocab_path)       #建立字表
     data_loader = build_dataset(corpus_path, vocab, max_length, batch_size)  #建立数据集
     model = TorchModel(char_dim, hidden_size, num_rnn_layers, vocab)   #建立模型
@@ -168,12 +168,12 @@ def predict(model_path, vocab_path, input_strings):
 
 if __name__ == "__main__":
     main()
-    # print(jieba.lcut("今天天气不错我们去春游吧"))
-    # print(sequence_to_label("今天天气不错我们去春游吧"))
-    # print(sentence_to_sequence("今天天气不错我们去春游吧"))
-    # input_strings = ["同时国内有望出台新汽车刺激方案",
-    #                  "沪胶后市有望延续强势",
-    #                  "经过两个交易日的强势调整后",
-    #                  "昨日上海天然橡胶期货价格再度大幅上扬"]
-    # predict("model.pth", "chars.txt", input_strings)
+    print(jieba.lcut("今天天气不错我们去春游吧"))
+    print(sequence_to_label("今天天气不错我们去春游吧"))
+    print(sentence_to_sequence("今天天气不错我们去春游吧"))
+    input_strings = ["同时国内有望出台新汽车刺激方案",
+                     "沪胶后市有望延续强势",
+                     "经过两个交易日的强势调整后",
+                     "昨日上海天然橡胶期货价格再度大幅上扬"]
+    predict("model.pth", "chars.txt", input_strings)
 
