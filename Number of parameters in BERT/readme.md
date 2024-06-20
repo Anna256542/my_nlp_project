@@ -1,0 +1,2 @@
+比较通过直接调用transformers库中的BertModel加载的预训练BERT模型的参数数量，
+与手动计算BERT模型参数数量的差异
