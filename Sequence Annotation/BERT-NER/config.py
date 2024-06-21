@@ -19,5 +19,5 @@ Config = {
     "learning_rate": 1e-3,
     "use_crf": True,
     "class_num": 9,
-    "bert_path": r"D:\AI\nlp\八斗课程-精品班\第六周\bert-base-chinese"
+    "bert_path": "bert-base-chinese"
 }
