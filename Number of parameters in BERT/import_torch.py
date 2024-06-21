@@ -7,7 +7,7 @@ import torch.nn as nn
 import numpy as np
 from transformers import BertModel
 # 加载预训练的BERT模型
-model = BertModel.from_pretrained(r"D:\AI\nlp\八斗课程-精品班\第六周\bert-base-chinese", return_dict=False)
+model = BertModel.from_pretrained("bert-base-chinese", return_dict=False)
 
 #手动DIY计算参数个数
 def main():
